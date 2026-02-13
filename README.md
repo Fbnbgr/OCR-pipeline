@@ -2,7 +2,7 @@
 
 Automatisierte OCR-Verarbeitung großer PDF-Dokumente mit Tesseract und OCRmyPDF.
 
-## 🚀 Schnellstart
+## Schnellstart
 
 ```bash
 # 1. Virtuelle Umgebung aktivieren
@@ -15,20 +15,19 @@ cp /path/to/pdfs/*.pdf input/
 python ocr_process.py
 ```
 
-## 📋 Was macht die Pipeline?
+## Was macht die Pipeline?
 
 1. **Requirements Installation**: Installiert alle Python-Abhängigkeiten
 2. **OCR Verarbeitung**: Extrahiert Text aus PDF-Bildern mit Tesseract (Deutsch+Englisch)
 3. **Text-Layer Hinzufügen**: Erstellt durchsuchbare PDFs mit ocrmypdf
 4. **Logging & Statistiken**: Detailliertes Logging mit Gesamtstatistiken
 
-## 📁 Verzeichnisstruktur
+## Verzeichnisstruktur
 
 ```
 OCR pipeline/
 ├── ocr_process.py          ← HAUPTDATEI
 ├── requirements.txt         ← Dependencies
-├── config.ini              ← Konfiguration
 ├── input/                  ← PDF-Eingabe
 ├── output/                 ← Text-Extrakte (.txt)
 ├── output_with_text_layer/ ← Finale PDFs mit Textebene
@@ -36,7 +35,7 @@ OCR pipeline/
 └── .venv/                  ← Python Virtual Environment
 ```
 
-## 📊 Output
+## Output
 
 Nach der Verarbeitung finden Sie:
 
@@ -45,7 +44,7 @@ Nach der Verarbeitung finden Sie:
 - **`output/ocr_statistics.json`**: Detaillierte Statistiken (Zeichen, Wörter, Seiten)
 - **`logs/ocr_pipeline.log`**: Vollständiges Verarbeitungslog
 
-## 🔧 Konfiguration
+## Konfiguration
 
 Systemanforderungen:
 - Tesseract OCR (installiert und im PATH)
@@ -56,13 +55,13 @@ Unterstützte Sprachen:
 - Deutsch (deu)
 - Englisch (eng)
 
-## 💡 Performance
+## Performance
 
 - DPI: 100 (optimiert für große Dateien)
 - Durchsatz: ~20-30 Seiten pro Minute
 - Speichernutzung: Effizient durch Streaming
 
-## 📝 Logging
+## Logging
 
 Die Konsolenausgabe zeigt:
 - Verarbeitungsfortschritt pro Datei
@@ -74,17 +73,10 @@ Die Log-Datei enthält zusätzlich:
 - Detaillierte Fehlerberichte
 - Komplette Verarbeitungshistorie
 
-## ⚙️ Anforderungen
+## Anforderungen
 
 Alle benötigten Packages sind in `requirements.txt` aufgelistet:
 - **pytesseract**: Python-Interface zu Tesseract
 - **pdf2image**: PDF zu Bild-Konvertierung
 - **ocrmypdf**: OCR und Textebenen-Hinzufügung
 - **PyMuPDF**: PDF-Manipulation
-
-## 📞 Troubleshooting
-
-Bei Problemen:
-1. Prüfen Sie `logs/ocr_pipeline.log`
-2. Verifizieren Sie, dass Tesseract installiert ist: `tesseract --version`
-3. Prüfen Sie PDF-Größe und -Format
