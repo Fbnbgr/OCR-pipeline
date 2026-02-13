@@ -22,6 +22,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 from collections import defaultdict
+import concurrent.futures
 
 # PDF-Verarbeitung
 import pytesseract
@@ -202,6 +203,13 @@ def add_text_layer_with_ocrmypdf(pdf_path, txt_path, output_path):
 # ============================================================================
 
 def process_all_pdfs():
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = []
+        for pdf_path in INPUT_DIR.glob('*.pdf'): 
+            future = executor.submit(process_pdf_with_tesseract, pdf_path)
+            futures.append(future)
+        results = [future.result() for future in futures]
+
     """Verarbeitet alle PDFs aus dem input Verzeichnis."""
     logger.info("\n" + "=" * 80)
     logger.info("2. OCR VERARBEITUNG")
