@@ -8,12 +8,18 @@ Automatisierte OCR-Verarbeitung großer PDF-Dokumente mit Tesseract und OCRmyPDF
 # 1. Virtuelle Umgebung aktivieren
 source .venv/bin/activate
 
-# 2. PDFs in input/ Ordner kopieren
+# 2. Setup starten
+setup.bat bzw. setup.sh
+
+# 3. PDFs in input/ Ordner kopieren
 cp /path/to/pdfs/*.pdf input/
 
-# 3. Pipeline ausführen
+# 4. Pipeline ausführen
 python ocr_process.py
 ```
+### Windows
+choco install ghostscript -y
+
 
 ## Was macht die Pipeline?
 
