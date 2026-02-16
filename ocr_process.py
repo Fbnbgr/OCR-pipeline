@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 OCR Pipeline - Zentrale Produktionsdatei
 ==========================================
@@ -28,6 +27,8 @@ import concurrent.futures
 import pytesseract
 from pdf2image import convert_from_path
 import ocrmypdf
+from ocrmypdf import OcrOptions
+from ocrmypdf import ocr
 
 # ============================================================================
 # LOGGING SETUP
@@ -77,7 +78,6 @@ BASE_DIR = Path(__file__).parent
 INPUT_DIR = BASE_DIR / 'input'
 OUTPUT_DIR = BASE_DIR / 'output'
 OUTPUT_WITH_TEXT_DIR = BASE_DIR / 'output_with_text_layer'
-VENV_DIR = BASE_DIR / '.venv'
 
 # Erstelle Verzeichnisse
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -86,52 +86,6 @@ OUTPUT_WITH_TEXT_DIR.mkdir(exist_ok=True)
 logger.info(f"Arbeitsverzeichnis: {BASE_DIR}")
 logger.info(f"Input: {INPUT_DIR}")
 logger.info(f"Output: {OUTPUT_DIR}")
-
-# ============================================================================
-# REQUIREMENTS INSTALLATION
-# ============================================================================
-
-def install_requirements():
-    """Installiert alle Python-Abhängigkeiten."""
-    logger.info("\n" + "=" * 80)
-    logger.info("1. INSTALLATION VON REQUIREMENTS")
-    logger.info("=" * 80)
-    
-    requirements_file = BASE_DIR / 'requirements.txt'
-    
-    if not requirements_file.exists():
-        logger.warning(f"requirements.txt nicht gefunden: {requirements_file}")
-        return False
-    
-    try:
-        logger.info(f"Installiere Packages aus: {requirements_file}")
-        
-        # Nutze den Python aus der venv
-        python_exe = VENV_DIR / 'bin' / 'python'
-        pip_exe = VENV_DIR / 'bin' / 'pip'
-        
-        if not pip_exe.exists():
-            logger.error(f"pip nicht gefunden: {pip_exe}")
-            return False
-        
-        result = subprocess.run(
-            [str(pip_exe), 'install', '-q', '-r', str(requirements_file)],
-            capture_output=True,
-            text=True,
-            timeout=600
-        )
-        
-        if result.returncode != 0:
-            logger.warning(f"pip install hatte Warnungen: {result.stderr}")
-        else:
-            logger.info("✓ Alle Requirements erfolgreich installiert")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"✗ Fehler bei Requirements Installation: {e}")
-        return False
-
 
 # ============================================================================
 # OCR VERARBEITUNG
@@ -175,10 +129,10 @@ def add_text_layer_with_ocrmypdf(pdf_path, txt_path, output_path):
     try:
         logger.info(f"  Füge Textebene hinzu...")
         
-        result = ocrmypdf.ocr(
+        options = OcrOptions(
             input_file=str(pdf_path),
             output_file=str(output_path),
-            language='deu+eng',
+            languages=["deu", "eng"],
             force_ocr=True,
             optimize=0,
             keep_temporary_files=False,
@@ -186,6 +140,7 @@ def add_text_layer_with_ocrmypdf(pdf_path, txt_path, output_path):
             progress_bar=False,
             sidecar=str(txt_path)
         )
+        result = ocrmypdf.ocr(options)
         
         if result != ocrmypdf.ExitCode.ok:
             logger.error(f"  ✗ ocrmypdf Fehler: {result}")
@@ -305,21 +260,21 @@ def save_statistics(statistics):
     with open(stats_file, 'w', encoding='utf-8') as f:
         json.dump(statistics, f, indent=2, ensure_ascii=False)
     
-    logger.info(f"\n📊 GESAMTSTATISTIKEN:")
+    logger.info(f"\nGESAMTSTATISTIKEN:")
     logger.info(f"  Verarbeitete Dateien: {statistics['successful']}/{statistics['total_files']}")
     logger.info(f"  Fehler: {statistics['failed']}")
     logger.info(f"  Gesamte Seiten: {statistics['total_pages']:,}")
     logger.info(f"  Gesamte Zeichen: {statistics['total_characters']:,}")
     logger.info(f"  Gesamte Wörter: {statistics['total_words']:,}")
     
-    logger.info(f"\n📁 DATEIEN:")
+    logger.info(f"\nDATEIEN:")
     logger.info(f"  Text-Ausgaben: {OUTPUT_DIR}")
     logger.info(f"  PDF mit Textebene: {OUTPUT_WITH_TEXT_DIR}")
     logger.info(f"  Statistiken: {stats_file}")
     logger.info(f"  Log-Datei: {log_file}")
     
     # Detaillierte Tabelle
-    logger.info(f"\n📋 DETAILLIERTE ÜBERSICHT:")
+    logger.info(f"\nDETAILLIERTE ÜBERSICHT:")
     logger.info("-" * 100)
     logger.info(f"{'Datei':<25} {'Seiten':>8} {'Zeichen':>12} {'Wörter':>10} {'Input MB':>10} {'Output MB':>10}")
     logger.info("-" * 100)
@@ -347,10 +302,6 @@ def save_statistics(statistics):
 def main():
     """Hauptfunktion."""
     try:
-        # Installation
-        if not install_requirements():
-            logger.warning("Requirements Installation hatte Probleme, fahre fort...")
-        
         # Verarbeitung
         statistics = process_all_pdfs()
         
