@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCRmyPDF Web Service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0e1117;
+    --surface:   #161b24;
+    --border:    #2a3040;
+    --border-hi: #3a4558;
+    --text:      #e2e8f0;
+    --muted:     #6b7a99;
+    --accent:    #4f8ef7;
+    --accent-dim:#1e3a6e;
+    --success:   #34d399;
+    --error:     #f87171;
+    --warn:      #fbbf24;
+    --radius:    8px;
+  }
+
+  html, body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .page {
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: clamp(22px, 5vw, 32px);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+    color: #fff;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    margin-bottom: 28px;
+    font-size: 13px;
+  }
+
+  /* ── Drop Zone ── */
+  .dropzone {
+    background: var(--surface);
+    border: 1.5px dashed var(--border-hi);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    margin-bottom: 16px;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(79,142,247,.06);
+  }
+  .dropzone svg { flex-shrink: 0; color: var(--accent); }
+  .dropzone-text { flex: 1; }
+  .dropzone-text strong { display: block; color: var(--text); font-weight: 500; }
+  .dropzone-text span { color: var(--muted); font-size: 12px; }
+  #fileInput { display: none; }
+
+  .btn-browse {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1.5px solid var(--border-hi);
+    color: var(--text);
+    padding: 8px 18px;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    white-space: nowrap;
+  }
+  .btn-browse:hover {
+    border-color: var(--accent);
+    background: rgba(79,142,247,.1);
+  }
+
+  /* ── Selected file pill ── */
+  #filePill {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+  #filePill .pill-name { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #filePill .pill-size { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 11px; }
+  #filePill .pill-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; }
+  #filePill .pill-remove:hover { color: var(--error); }
+
+  /* ── Form controls ── */
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 520px) { .field-row { grid-template-columns: 1fr; } }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .4px; text-transform: uppercase; }
+
+  select, input[type="text"] {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 9px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s;
+    width: 100%;
+    appearance: none;
+  }
+  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7a99' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+  select:focus, input[type="text"]:focus { border-color: var(--accent); }
+  select option { background: #1a2030; }
+
+  .help-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 1px solid var(--border-hi);
+    color: var(--muted);
+    font-size: 10px;
+    cursor: help;
+    vertical-align: middle;
+    margin-left: 4px;
+  }
+
+  /* ── Collapsible sections ── */
+  .accordion {
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .accordion-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--surface);
+    transition: background .15s;
+    border: none;
+    width: 100%;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    text-align: left;
+  }
+  .accordion-header:hover { background: #1c2333; }
+  .accordion-chevron {
+    margin-left: auto;
+    transition: transform .2s;
+    color: var(--muted);
+  }
+  .accordion.open .accordion-chevron { transform: rotate(90deg); }
+  .accordion-body {
+    display: none;
+    padding: 16px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+  .accordion.open .accordion-body { display: block; }
+
+  /* ── Toggle switches ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label { font-size: 13px; color: var(--text); }
+  .toggle-desc { font-size: 11px; color: var(--muted); }
+  .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: var(--border-hi);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .slider::before {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    left: 3px; bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .2s;
+  }
+  .switch input:checked + .slider { background: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(16px); }
+
+  /* ── Submit button ── */
+  .btn-submit {
+    width: 100%;
+    margin-top: 16px;
+    padding: 13px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .5px;
+    transition: background .15s, opacity .15s, transform .1s;
+  }
+  .btn-submit:hover:not(:disabled) { background: #3a7ee8; }
+  .btn-submit:active:not(:disabled) { transform: scale(.99); }
+  .btn-submit:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── Job status cards ── */
+  #jobList { margin-top: 28px; display: flex; flex-direction: column; gap: 10px; }
+
+  .job-card {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    animation: slideIn .25s ease;
+  }
+  @keyframes slideIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
+
+  .job-icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .job-icon.queued    { background: rgba(251,191,36,.1);  }
+  .job-icon.processing { background: rgba(79,142,247,.1); }
+  .job-icon.done      { background: rgba(52,211,153,.1);  }
+  .job-icon.error     { background: rgba(248,113,113,.1); }
+
+  .job-info { flex: 1; min-width: 0; }
+  .job-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-meta { font-size: 11px; color: var(--muted); }
+
+  .job-status {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    flex-shrink: 0;
+  }
+  .job-status.queued     { background: rgba(251,191,36,.15);  color: var(--warn); }
+  .job-status.processing { background: rgba(79,142,247,.15);  color: var(--accent); }
+  .job-status.done       { background: rgba(52,211,153,.15);  color: var(--success); }
+  .job-status.error      { background: rgba(248,113,113,.15); color: var(--error); }
+
+  .btn-dl {
+    flex-shrink: 0;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background .15s;
+  }
+  .btn-dl:hover { background: rgba(79,142,247,.25); }
+
+  /* ── Progress bar ── */
+  .progress-wrap { width: 100%; height: 3px; background: var(--border); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .progress-bar  { height: 100%; background: var(--accent); border-radius: 3px; animation: indeterminate 1.4s ease infinite; transform-origin: left; }
+  @keyframes indeterminate {
+    0%   { transform: scaleX(0) translateX(0); }
+    50%  { transform: scaleX(.6) translateX(80px); }
+    100% { transform: scaleX(0) translateX(300px); }
+  }
+
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+    margin: 20px 0 10px;
+    font-weight: 600;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    min-width: 18px; height: 18px;
+    border-radius: 9px;
+    padding: 0 5px;
+    margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>OCRmyPDF Web Service</h1>
+  <p class="subtitle">Upload input PDF or image</p>
+
+  <!-- Drop Zone -->
+  <div class="dropzone" id="dropzone">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M12 16V4m0 0L8 8m4-4 4 4"/>
+      <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1"/>
+    </svg>
+    <div class="dropzone-text">
+      <strong>Drag and drop file here</strong>
+      <span>Limit 200MB per file • PDF</span>
+    </div>
+    <button type="button" class="btn-browse" onclick="document.getElementById('fileInput').click()">Browse files</button>
+  </div>
+  <input type="file" id="fileInput" accept=".pdf">
+
+  <!-- File Pill -->
+  <div id="filePill">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+    </svg>
+    <span class="pill-name" id="pillName"></span>
+    <span class="pill-size" id="pillSize"></span>
+    <button class="pill-remove" onclick="clearFile()" title="Remove">×</button>
+  </div>
+
+  <!-- Mode + Pages -->
+  <div class="field-row">
+    <div class="field">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="normal">normal</option>
+        <option value="force">force</option>
+        <option value="skip">skip text</option>
+        <option value="redo">redo OCR</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Pages <span class="help-icon" title="e.g. 1-3,5 – leave blank for all">?</span></label>
+      <input type="text" id="pages" placeholder="e.g. 1-3,5">
+    </div>
+  </div>
+
+  <!-- Input options -->
+  <div class="accordion" id="acc-input">
+    <button class="accordion-header" onclick="toggleAcc('acc-input')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Input options
+      <svg class="accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="accordion-body">
+      <div class="field" style="margin-bottom:12px">
+        <label>Language(s)</label>
+        <select id="language">
+          <option value="deu+eng">deu+eng (German + English)</option>
+          <option value="deu">deu (German)</option>
+          <option value="eng">eng (English)</option>
+          <option value="fra+eng">fra+eng (French + English)</option>
+          <option value="spa+eng">spa+eng (Spanish + English)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preprocessing -->
+  <div class="accordion" id="acc-pre">
+    <button class="accordion-header" onclick="toggleAcc('acc-pre')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Preprocessing
+      <svg class="accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="accordion-body">
+      <div class="toggle-row">
+        <div><div class="toggle-label">Deskew</div><div class="toggle-desc">Straighten skewed pages</div></div>
+        <label class="switch"><input type="checkbox" id="deskew" checked><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Rotate pages</div><div class="toggle-desc">Auto-rotate pages to correct orientation</div></div>
+        <label class="switch"><input type="checkbox" id="rotate_pages"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Remove background</div><div class="toggle-desc">Attempt to remove background</div></div>
+        <label class="switch"><input type="checkbox" id="remove_background"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Clean</div><div class="toggle-desc">Clean pages before OCR</div></div>
+        <label class="switch"><input type="checkbox" id="clean"><span class="slider"></span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output options -->
+  <div class="accordion" id="acc-out">
+    <button class="accordion-header" onclick="toggleAcc('acc-out')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Output options
+      <svg class="accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="accordion-body">
+      <div class="field">
+        <label>Optimize</label>
+        <select id="optimize">
+          <option value="0">0 – None</option>
+          <option value="1" selected>1 – Lossless (default)</option>
+          <option value="2">2 – Lossy (smaller)</option>
+          <option value="3">3 – Aggressive</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <button class="btn-submit" id="btnSubmit" disabled onclick="submitJob()">
+    Run OCR
+  </button>
+
+  <!-- Job list -->
+  <div id="jobList"></div>
+
+</div>
+
+<script>
+  let selectedFile = null;
+  const jobPollers = {};
+
+  // ── Drag & Drop ──
+  const dz = document.getElementById('dropzone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+  dz.addEventListener('click', e => {
+    if (e.target.closest('.btn-browse')) return;
+    document.getElementById('fileInput').click();
+  });
+  document.getElementById('fileInput').addEventListener('change', e => {
+    if (e.target.files[0]) setFile(e.target.files[0]);
+  });
+
+  function setFile(f) {
+    if (!f.name.toLowerCase().endsWith('.pdf')) {
+      alert('Only PDF files are accepted.');
+      return;
+    }
+    selectedFile = f;
+    document.getElementById('pillName').textContent = f.name;
+    document.getElementById('pillSize').textContent = formatBytes(f.size);
+    const pill = document.getElementById('filePill');
+    pill.style.display = 'flex';
+    document.getElementById('btnSubmit').disabled = false;
+  }
+
+  function clearFile() {
+    selectedFile = null;
+    document.getElementById('filePill').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    document.getElementById('btnSubmit').disabled = true;
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(1) + ' MB';
+  }
+
+  // ── Accordion ──
+  function toggleAcc(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── Submit ──
+  async function submitJob() {
+    if (!selectedFile) return;
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('mode', document.getElementById('mode').value);
+    fd.append('pages', document.getElementById('pages').value);
+    fd.append('language', document.getElementById('language').value);
+    fd.append('deskew', document.getElementById('deskew').checked);
+    fd.append('rotate_pages', document.getElementById('rotate_pages').checked);
+    fd.append('remove_background', document.getElementById('remove_background').checked);
+    fd.append('clean', document.getElementById('clean').checked);
+    fd.append('optimize', document.getElementById('optimize').value);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Upload failed');
+      }
+      const { job_id, filename } = await res.json();
+      addJobCard(job_id, filename);
+      clearFile();
+      btn.textContent = 'Run OCR';
+      btn.disabled = true;
+      startPolling(job_id);
+    } catch(e) {
+      alert('Error: ' + e.message);
+      btn.textContent = 'Run OCR';
+      btn.disabled = false;
+    }
+  }
+
+  // ── Job Card ──
+  const statusIcons = { queued: '⏳', processing: '⚙️', done: '✅', error: '❌' };
+
+  function addJobCard(jobId, filename) {
+    const list = document.getElementById('jobList');
+
+    // Section header if first job
+    if (!document.getElementById('jobsHeader')) {
+      const h = document.createElement('p');
+      h.className = 'section-label';
+      h.id = 'jobsHeader';
+      h.textContent = 'Jobs';
+      list.before(h);
+    }
+
+    const card = document.createElement('div');
+    card.className = 'job-card';
+    card.id = `job-${jobId}`;
+    card.innerHTML = `
+      <div class="job-icon queued" id="icon-${jobId}">${statusIcons.queued}</div>
+      <div class="job-info">
+        <div class="job-name">${escHtml(filename)}</div>
+        <div class="job-meta" id="meta-${jobId}">Queued</div>
+        <div class="progress-wrap" id="prog-${jobId}" style="display:none"><div class="progress-bar"></div></div>
+      </div>
+      <span class="job-status queued" id="status-${jobId}">queued</span>
+      <span id="dl-${jobId}"></span>
+    `;
+    list.prepend(card);
+  }
+
+  function updateJobCard(jobId, status, error) {
+    const card = document.getElementById(`job-${jobId}`);
+    if (!card) return;
+
+    const icon = document.getElementById(`icon-${jobId}`);
+    const meta = document.getElementById(`meta-${jobId}`);
+    const prog = document.getElementById(`prog-${jobId}`);
+    const badge = document.getElementById(`status-${jobId}`);
+    const dl = document.getElementById(`dl-${jobId}`);
+
+    icon.className = `job-icon ${status}`;
+    icon.textContent = statusIcons[status] || '?';
+    badge.className = `job-status ${status}`;
+    badge.textContent = status;
+    card.style.borderColor = status === 'done' ? 'rgba(52,211,153,.3)' : status === 'error' ? 'rgba(248,113,113,.3)' : '';
+
+    if (status === 'processing') {
+      meta.textContent = 'Running OCR…';
+      prog.style.display = 'block';
+    } else if (status === 'done') {
+      meta.textContent = 'Completed';
+      prog.style.display = 'none';
+      dl.innerHTML = `<a class="btn-dl" href="/api/download/${jobId}" download>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 16V4m0 12l-4-4m4 4 4-4"/><path d="M4 20h16"/></svg>
+        Download
+      </a>`;
+    } else if (status === 'error') {
+      meta.textContent = 'Error: ' + (error || 'unknown');
+      prog.style.display = 'none';
+    }
+  }
+
+  // ── Polling ──
+  function startPolling(jobId) {
+    if (jobPollers[jobId]) return;
+    jobPollers[jobId] = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/status/${jobId}`);
+        const data = await res.json();
+        updateJobCard(jobId, data.status, data.error);
+        if (data.status === 'done' || data.status === 'error') {
+          clearInterval(jobPollers[jobId]);
+          delete jobPollers[jobId];
+        }
+      } catch(e) {
+        console.error('Poll error', e);
+      }
+    }, 1500);
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>

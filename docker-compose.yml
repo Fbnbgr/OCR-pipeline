@@ -1,9 +1,11 @@
 services:
-  ocr-pipeline:
+  ocr-web:
     build: .
-    container_name: ocr_pipeline
+    container_name: ocr_web
+    ports:
+      - "8000:8000"
     volumes:
-      - ./input:/app/input
       - ./output:/app/output
       - ./logs:/app/logs
+    restart: unless-stopped
     tty: true

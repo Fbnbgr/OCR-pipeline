@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# System deps
+# System dependencies
 RUN apt-get update && apt-get install -y \
     ghostscript \
     tesseract-ocr \
@@ -11,16 +11,23 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Wichtig: distro packages entfernen
+# Remove conflicting distro packages
 RUN pip uninstall -y ocrmypdf pdfminer-six pikepdf || true
 
-# pip aktualisieren
+# Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Requirements installieren (erzwingt aktuelle Version)
+# Install requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir --ignore-installed -r requirements.txt
 
-COPY . .
+# Copy app files
+COPY app.py .
+COPY static/ ./static/
 
-CMD ["python", "ocr_process.py"]
+# Create working directories
+RUN mkdir -p uploads output logs
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
