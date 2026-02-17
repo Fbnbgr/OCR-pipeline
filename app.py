@@ -1,5 +1,6 @@
 import ocrmypdf
 import uuid
+import os
 import asyncio
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
@@ -21,7 +22,7 @@ app = FastAPI(title="OCRmyPDF Web Service")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -37,7 +38,7 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
             "deskew": options.get("deskew", True),
             "language": options.get("language", "deu+eng"),
             "optimize": int(options.get("optimize", 1)),
-            "jobs": 1,
+            "jobs": str(os.cpu_count()),
         }
 
         mode = options.get("mode", "normal")
@@ -62,6 +63,7 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
         ocrmypdf.ocr(str(input_path), str(output_path), **kwargs)
         jobs[job_id]["status"] = "done"
         logger.info(f"Job {job_id} completed: {output_path.name}")
+        logger.info(f"kwargs {kwargs}")
     except Exception as e:
         jobs[job_id]["status"] = "error"
         jobs[job_id]["error"] = str(e)
