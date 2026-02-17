@@ -1,26 +1,26 @@
-# Basisimage
 FROM python:3.12-slim
 
-# Arbeitsverzeichnis
 WORKDIR /app
 
-# Systemabhängigkeiten installieren
+# System deps
 RUN apt-get update && apt-get install -y \
+    ghostscript \
     tesseract-ocr \
     tesseract-ocr-deu \
     tesseract-ocr-eng \
     poppler-utils \
-    ghostscript \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Python-Dependencies kopieren und installieren
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Wichtig: distro packages entfernen
+RUN pip uninstall -y ocrmypdf pdfminer-six pikepdf || true
 
-# Projekt kopieren
+# pip aktualisieren
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Requirements installieren (erzwingt aktuelle Version)
+COPY requirements.txt .
+RUN pip install --no-cache-dir --ignore-installed -r requirements.txt
+
 COPY . .
 
-# Default Command
 CMD ["python", "ocr_process.py"]

@@ -5,6 +5,5 @@ services:
     volumes:
       - ./input:/app/input
       - ./output:/app/output
-      - ./output_with_text_layer:/app/output_with_text_layer
       - ./logs:/app/logs
     tty: true
