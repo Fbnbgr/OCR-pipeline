@@ -51,8 +51,8 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
 
         if options.get("rotate_pages"):
             kwargs["rotate_pages"] = True
-        if options.get("remove_background"):
-            kwargs["remove_background"] = True
+        # if options.get("remove_background"):
+        #     kwargs["remove_background"] = True
         if options.get("clean"):
             kwargs["clean"] = True
 
@@ -82,7 +82,7 @@ async def upload(
     language: str = Form("deu+eng"),
     deskew: str = Form("true"),
     rotate_pages: str = Form("false"),
-    remove_background: str = Form("false"),
+    # remove_background: str = Form("false"),
     clean: str = Form("false"),
     optimize: str = Form("1"),
 ):
@@ -107,7 +107,7 @@ async def upload(
         "language": language,
         "deskew": deskew.lower() == "true",
         "rotate_pages": rotate_pages.lower() == "true",
-        "remove_background": remove_background.lower() == "true",
+        # "remove_background": remove_background.lower() == "true",
         "clean": clean.lower() == "true",
         "optimize": optimize,
     }
