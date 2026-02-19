@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-deu \
     tesseract-ocr-eng \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-chi-tra \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
