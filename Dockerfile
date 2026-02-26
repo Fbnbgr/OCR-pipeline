@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-eng \
     tesseract-ocr-chi-sim \
     tesseract-ocr-chi-tra \
+    tesseract-ocr-frk \
     unpaper \
     poppler-utils \
     jbig2dec \
@@ -22,6 +23,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 # Install requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir --ignore-installed -r requirements.txt
+RUN pip install https://github.com/explosion/spacy-models/releases/download/de_core_news_lg-3.7.0/de_core_news_lg-3.7.0-py3-none-any.whl
 
 # Copy app files
 COPY app.py .
