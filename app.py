@@ -90,6 +90,17 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
         if jobs[job_id]["status"] == "done":
             eval_result = evaluate_pdf(output_path, vocab, known_names)
             jobs[job_id]["eval"] = eval_result
+
+            # JSON-Log pro Dokument
+            log_path = BASE_DIR / "logs" / f"{job_id}.json"
+            with open(log_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "job_id": job_id,
+                    "filename": jobs[job_id]["filename"],
+                    "eval": eval_result
+                }, f, ensure_ascii=False, indent=2)
+            logger.info(f"Job {job_id} eval log saved: {log_path.name}")
+
             logger.info(
                 f"Job {job_id} eval: "
                 f"recognition={eval_result['overall_recognition_rate']:.1%} "
@@ -99,7 +110,10 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
                 f"char_count={eval_result['char_count']} "
                 f"misses={eval_result['vocabulary']['misses']} "
                 f"suspicious_names={len(eval_result['proper_nouns']['suspicious'])} "
-                f"top_misses={eval_result['vocabulary']['top_misses']}"
+                #f"top_misses={eval_result['vocabulary']['top_misses']} "
+                f"misses_all={eval_result['vocabulary']['misses_all']}"
+                f"hits_all={eval_result['vocabulary']['hits_all']}"
+                f"fuzzy_hits_all={eval_result['vocabulary']['fuzzy_hits_all']}"
             )
             logger.info(f"Compound cache: {is_valid_compound.cache_info()}")
 
@@ -152,6 +166,8 @@ def split_proper_nouns(text: str) -> tuple[list[str], list[str]]:
             continue
         if len(token.text) < 2:      # Einzelbuchstaben raus
             continue
+        if re.search(r"[^a-zA-ZäöüÄÖÜß]", token.text):  # Sonderzeichen raus
+            continue
         
         lemma = token.lemma_.lower()
         
@@ -167,32 +183,37 @@ def evaluate_against_vocab(
     vocab: set[str],
     fuzzy_threshold: int = 85
 ) -> dict:
-    exact_hits = 0
-    fuzzy_hits = 0
+    exact_hits = []
+    fuzzy_hits = []
     misses = []
 
     for token in tokens:
+        if not token.isalpha():
+            continue
         if (token in vocab or is_valid_compound(token)):
-            exact_hits += 1
+            exact_hits.append(token)
         else:
             # Fuzzy-Match für OCR-typische Fehler (0→O, l→1, etc.)
             match, score, _ = process.extractOne(
                 token, vocab, scorer=fuzz.ratio
             )
             if score >= fuzzy_threshold:
-                fuzzy_hits += 1
+                fuzzy_hits.append(token)
             else:
                 misses.append((token, str(match), score))
 
     total = len(tokens)
     return {
         "total_tokens": total,
-        "exact_hits": exact_hits,
-        "fuzzy_hits": fuzzy_hits,
+        "exact_hits": len(exact_hits),
+        "fuzzy_hits": len(fuzzy_hits),
         "misses": len(misses),
-        "exact_rate": exact_hits / total if total else 0,
-        "recognition_rate": (exact_hits + fuzzy_hits) / total if total else 0,
+        "exact_rate": len(exact_hits) / total if total else 0,
+        "recognition_rate": (len(exact_hits) + len(fuzzy_hits)) / total if total else 0,
         "top_misses": sorted(misses, key=lambda x: x[2])[:20],
+        "misses_all": misses,
+        "hits_all": exact_hits,
+        "fuzzy_hits_all": fuzzy_hits,
     }
 
 def evaluate_proper_nouns(
