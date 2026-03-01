@@ -8,5 +8,7 @@ services:
       - ./output:/app/output
       - ./logs:/app/logs
       - ./dict:/app/dict
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     tty: true

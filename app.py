@@ -1,3 +1,5 @@
+from urllib import response
+
 import ocrmypdf
 import uuid
 import os
@@ -19,6 +21,7 @@ import spacy
 import json
 from spellchecker import SpellChecker
 from functools import lru_cache
+import ollama
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,7 +91,7 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
 
         # evaluation nach Abschluss der OCR durchführen und loggen
         if jobs[job_id]["status"] == "done":
-            eval_result = evaluate_pdf(output_path, vocab, known_names)
+            eval_result, corrected_text = evaluate_pdf(output_path, vocab, known_names)
             jobs[job_id]["eval"] = eval_result
 
             # JSON-Log pro Dokument
@@ -97,10 +100,12 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
                 json.dump({
                     "job_id": job_id,
                     "filename": jobs[job_id]["filename"],
-                    "eval": eval_result
+                    "eval": eval_result,
+                    "llm": corrected_text,
                 }, f, ensure_ascii=False, indent=2)
             logger.info(f"Job {job_id} eval log saved: {log_path.name}")
 
+            jobs[job_id]["status"] = "correcting"
             logger.info(
                 f"Job {job_id} eval: "
                 f"recognition={eval_result['overall_recognition_rate']:.1%} "
@@ -110,10 +115,10 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
                 f"char_count={eval_result['char_count']} "
                 f"misses={eval_result['vocabulary']['misses']} "
                 f"suspicious_names={len(eval_result['proper_nouns']['suspicious'])} "
-                #f"top_misses={eval_result['vocabulary']['top_misses']} "
-                f"misses_all={eval_result['vocabulary']['misses_all']}"
-                f"hits_all={eval_result['vocabulary']['hits_all']}"
-                f"fuzzy_hits_all={eval_result['vocabulary']['fuzzy_hits_all']}"
+                # f"top_misses={eval_result['vocabulary']['top_misses']} "
+                # f"misses_all={eval_result['vocabulary']['misses_all']}"
+                # f"hits_all={eval_result['vocabulary']['hits_all']}"
+                # f"fuzzy_hits_all={eval_result['vocabulary']['fuzzy_hits_all']}"
             )
             logger.info(f"Compound cache: {is_valid_compound.cache_info()}")
 
@@ -203,6 +208,19 @@ def evaluate_against_vocab(
                 misses.append((token, str(match), score))
 
     total = len(tokens)
+
+    # Misses: niedrigster Score zuerst = schlimmste Fehler
+    misses = list(set(
+        m[0] for m in sorted(misses, key=lambda x: x[2])
+    ))
+
+    # Fuzzy: niedrigster Score zuerst = unsicherste Treffer
+    exact_hits = list(set(
+        m[0] for m in sorted(fuzzy_hits, key=lambda x: x[2])
+    ))
+    logger.info(f"exact_hits: {exact_hits}")
+    logger.info(f"fuzzy_hits: {fuzzy_hits}")
+
     return {
         "total_tokens": total,
         "exact_hits": len(exact_hits),
@@ -210,7 +228,7 @@ def evaluate_against_vocab(
         "misses": len(misses),
         "exact_rate": len(exact_hits) / total if total else 0,
         "recognition_rate": (len(exact_hits) + len(fuzzy_hits)) / total if total else 0,
-        "top_misses": sorted(misses, key=lambda x: x[2])[:20],
+        # "top_misses": sorted(misses, key=lambda x: x[2])[:20],
         "misses_all": misses,
         "hits_all": exact_hits,
         "fuzzy_hits_all": fuzzy_hits,
@@ -259,14 +277,20 @@ def evaluate_pdf(pdf_path: Path, vocab: set[str], known_names: set[str] = None) 
         name_result["plausibility_rate"] * 0.2
     )
     
-    return {
+    logger.info(f"Starte LLM-Korrektur")
+    corrected_text, all_corrections = correct_with_llm(text, vocab_result["fuzzy_hits_all"], vocab_result["misses_all"])
+    
+    eval_result = {
         "file": pdf_path.name,
         "overall_recognition_rate": round(overall, 4),
         "vocabulary": vocab_result,
         "proper_nouns": name_result,
         "char_count": len(text),
         "token_count": len(regular_tokens) + len(name_tokens),
+        "llm_corrections": all_corrections,
+        "llm_correction_count": len(all_corrections)
     }
+    return eval_result, corrected_text
 
 # Cache für zusammengesetzte Wörter, um wiederholte Checks zu beschleunigen
 @lru_cache(maxsize=10000)
@@ -284,6 +308,75 @@ def is_valid_compound(token: str) -> bool:
             return True
     return False
     
+    # Korrektur der OCR-Fehler mit LLM, basierend auf den erkannten Fehlern
+def correct_with_llm(text: str, fuzzy_hits: list[tuple], misses: list[tuple]) -> str:
+    fuzzy_words = list(set(m[0] for m in fuzzy_hits[:20]))  # Duplikate raus
+    miss_words = list(set(m[0] for m in misses[:20]))  # Duplikate raus
+    suspect_words = list(set(fuzzy_words + miss_words))
+
+    # Text in Chunks aufteilen
+    chunk_size = 2000  # Zeichen pro Chunk
+    chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+    logger.info(f"LLM Korrektur: {len(chunks)} Chunks, {len(suspect_words)} verdächtige Wörter")
+
+    corrected_chunks = []
+    for i, chunk in enumerate(chunks):
+        # Nur Chunks verarbeiten die verdächtige Wörter enthalten
+        if not any(word in chunk.lower() for word in suspect_words):
+            corrected_chunks.append(chunk)
+            continue
+
+    prompt = f"""Du bist ein OCR-Korrektur-Assistent.
+    Analysiere den Text und korrigiere NUR offensichtliche OCR-Fehler aus der Verdächtigenliste.
+    Erfinde KEINE Wörter. Behalte Eigennamen und Fremdwörter unverändert.
+
+    Antworte NUR mit einem JSON-Objekt in diesem Format:
+    {{
+        "corrections": [
+            {{"original": "witräumigkeit", "corrected": "weiträumigkeit", "reason": "fehlender Buchstabe"}},
+            {{"original": "ribao", "corrected": "ribao", "reason": "Eigenname, keine Korrektur"}}
+        ],
+        "corrected_text": "der vollständige korrigierte Text"
+    }}
+
+    Verdächtige Wörter: {', '.join(suspect_words)}
+
+    Text:
+    {chunk}"""
+
+    llm_response = client.chat(
+        model="mistral",
+        messages=[{"role": "user", "content": prompt}],
+        options={
+            "temperature": 0,
+            "num_predict": chunk_size + 200
+        }
+    )
+    
+    all_corrections = []
+    # Parse JSON
+    try:
+        raw = llm_response.message.content.strip()
+        raw = re.sub(r"```json|```", "", raw).strip()  # Markdown-Backticks raus
+        parsed = json.loads(raw)
+        
+        corrected_text = parsed.get("corrected_text", chunk)
+        corrections = parsed.get("corrections", [])
+        
+        # Nur tatsächliche Korrekturen loggen
+        actual = [c for c in corrections if c["original"] != c["corrected"]]
+        logger.info(f"Chunk {i+1}: {len(actual)} Korrekturen: {actual}")
+        
+        corrected_chunks.append(corrected_text)
+        all_corrections.extend(actual)  # ← Sammelliste über alle Chunks
+
+    except json.JSONDecodeError as e:
+        logger.error(f"LLM JSON Parse Fehler Chunk {i+1}: {e} – Original behalten")
+        corrected_chunks.append(chunk)
+
+
+        return "\n".join(corrected_chunks), all_corrections
+
 
 ### Evaluation setup ###
 logger.info("Building vocabulary and loading known names...")
@@ -291,6 +384,8 @@ vocab = build_vocab()
 known_names = load_wordlist(BASE_DIR / "dict" / "names.txt")
 nlp = spacy.load("de_core_news_lg")
 spell = SpellChecker(language="de")
+client = ollama.Client(host="http://host.docker.internal:11434")
+
 
 ### API Endpoints ###
 @app.post("/api/upload")
