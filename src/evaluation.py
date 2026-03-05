@@ -13,20 +13,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-### Evaluation setup ###
-logger.info("Building vocabulary and loading known names...")
-try:
-    vocab = build_vocab()
-    known_names = load_wordlist("dict" / "names.txt")
-    nlp = spacy.load("de_core_news_lg")
-    spell = SpellChecker(language="de")
-    client = ollama.Client(host="http://host.docker.internal:11434")
-    logger.info("Setup complete.")
-except Exception as e:
-    import traceback
-    logger.error(f"Startup failed: {e}")
-    logger.error(traceback.format_exc())
-    raise
+BASE_DIR = Path(__file__).parent.parent
+DICT_DIR = BASE_DIR / "dict"
+DICT_DIR.mkdir(exist_ok=True)
 
 ### Evaluation functions ###
 
@@ -49,7 +38,7 @@ def build_vocab() -> set[str]:
     vocab.update(str(w) for w in top_n_list("en", 20000))
     
     # 2. Domain-spezifische Wörter (z.B. aus bekannten Dokumenten)
-    vocab.update(load_wordlist("dict" / "domain_vocab.txt"))
+    vocab.update(load_wordlist(DICT_DIR / "domain_vocab.txt"))
     
     return vocab
 
@@ -283,3 +272,17 @@ def correct_with_llm(text: str, fuzzy_hits: list[tuple], misses: list[tuple]) ->
 
     return "\n".join(corrected_chunks), all_corrections
 
+### Evaluation setup ###
+logger.info("Building vocabulary and loading known names...")
+try:
+    vocab = build_vocab()
+    known_names = load_wordlist(DICT_DIR / "names.txt")
+    nlp = spacy.load("de_core_news_lg")
+    spell = SpellChecker(language="de")
+    client = ollama.Client(host="http://host.docker.internal:11434")
+    logger.info("Setup complete.")
+except Exception as e:
+    import traceback
+    logger.error(f"Startup failed: {e}")
+    logger.error(traceback.format_exc())
+    raise

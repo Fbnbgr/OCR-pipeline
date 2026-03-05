@@ -21,10 +21,8 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "output"
-DICT_DIR = BASE_DIR / "dict"
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
-DICT_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="OCRmyPDF Web Service")
 
@@ -82,6 +80,7 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
             input_path.unlink()
 
         # evaluation nach Abschluss der OCR durchführen und loggen
+        '''
         if jobs[job_id]["status"] == "done":
             eval_result, corrected_text = evaluation.evaluate_pdf(output_path)
             jobs[job_id]["eval"] = eval_result
@@ -112,7 +111,7 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
                 # f"hits_all={eval_result['vocabulary']['hits_all']}"
                 # f"fuzzy_hits_all={eval_result['vocabulary']['fuzzy_hits_all']}"
             )
-            logger.info(f"Compound cache: {evaluation.is_valid_compound.cache_info()}")
+            logger.info(f"Compound cache: {evaluation.is_valid_compound.cache_info()}")'''
 
 ### API Endpoints ###
 @app.post("/api/upload")
