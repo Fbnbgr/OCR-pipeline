@@ -18,7 +18,6 @@ DICT_DIR = BASE_DIR / "dict"
 DICT_DIR.mkdir(exist_ok=True)
 
 ### Evaluation functions ###
-
 def extract_text(pdf_path: Path) -> str:
     with pdfplumber.open(pdf_path) as pdf:
         return "\n".join(
@@ -156,7 +155,7 @@ def evaluate_proper_nouns(
         "plausibility_rate": len(plausible) / len(name_tokens) if name_tokens else 0
     }
 
-def evaluate_pdf(pdf_path: Path, vocab: set[str], known_names: set[str] = None) -> dict:
+def evaluate_pdf(pdf_path: Path) -> dict:
     # Laden der Datei
     text = extract_text(pdf_path)
     # Aufteilung in reguläre Tokens (evtl. bekannte Worte) und Eigennamen
@@ -171,12 +170,16 @@ def evaluate_pdf(pdf_path: Path, vocab: set[str], known_names: set[str] = None) 
         vocab_result["recognition_rate"] * 0.8 +
         name_result["plausibility_rate"] * 0.2
     )
+
+    initial_score = round(overall, 4)
+    logger.info(f"Ausgangsscore wurde ermittelt mit {initial_score}")
     
     logger.info(f"Starte LLM-Korrektur")
     corrected_text, all_corrections = correct_with_llm(text, vocab_result["fuzzy_hits_all"], vocab_result["misses_all"])
-    
+  
     eval_result = {
         "file": pdf_path.name,
+        "initial_score": initial_score,
         "overall_recognition_rate": round(overall, 4),
         "vocabulary": vocab_result,
         "proper_nouns": name_result,
@@ -185,11 +188,11 @@ def evaluate_pdf(pdf_path: Path, vocab: set[str], known_names: set[str] = None) 
         "llm_corrections": all_corrections,
         "llm_correction_count": len(all_corrections)
     }
-    return eval_result, corrected_text
+
 
 # Cache für zusammengesetzte Wörter, um wiederholte Checks zu beschleunigen
 @lru_cache(maxsize=10000)
-# Hilfsfunktion, um zusammengesetzte Wörter zu erkennen (z.B. "Donaudampfschifffahrtsgesellschaft")
+# Hilfsfunktion, um zusammengesetzte Wörter zu erkennen
 def is_valid_compound(token: str) -> bool:
     if len(token) < 6:  # kurze Wörter nicht als Komposita behandeln
         return False
@@ -268,8 +271,6 @@ def correct_with_llm(text: str, fuzzy_hits: list[tuple], misses: list[tuple]) ->
         except json.JSONDecodeError as e:
             logger.error(f"LLM JSON Parse Fehler Chunk {i+1}: {e} – Original behalten")
             corrected_chunks.append(chunk)
-
-
     return "\n".join(corrected_chunks), all_corrections
 
 ### Evaluation setup ###

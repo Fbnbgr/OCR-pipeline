@@ -80,7 +80,6 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
             input_path.unlink()
 
         # evaluation nach Abschluss der OCR durchführen und loggen
-        '''
         if jobs[job_id]["status"] == "done":
             eval_result, corrected_text = evaluation.evaluate_pdf(output_path)
             jobs[job_id]["eval"] = eval_result
@@ -111,7 +110,7 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
                 # f"hits_all={eval_result['vocabulary']['hits_all']}"
                 # f"fuzzy_hits_all={eval_result['vocabulary']['fuzzy_hits_all']}"
             )
-            logger.info(f"Compound cache: {evaluation.is_valid_compound.cache_info()}")'''
+            logger.info(f"Compound cache: {evaluation.is_valid_compound.cache_info()}")
 
 ### API Endpoints ###
 @app.post("/api/upload")
@@ -166,7 +165,6 @@ async def upload(
 
     return JSONResponse({"job_id": job_id, "filename": file.filename})
 
-
 @app.get("/api/status/{job_id}")
 def job_status(job_id: str):
     job = jobs.get(job_id)
@@ -179,7 +177,6 @@ def job_status(job_id: str):
         "error": job.get("error"),
         "eval": job.get("eval"),
     }
-
 
 @app.get("/api/download/{job_id}")
 def download(job_id: str):
