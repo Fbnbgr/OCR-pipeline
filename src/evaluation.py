@@ -158,6 +158,7 @@ def evaluate_proper_nouns(
 def evaluate_pdf(pdf_path: Path) -> dict:
     # Laden der Datei
     text = extract_text(pdf_path)
+
     # Aufteilung in reguläre Tokens (evtl. bekannte Worte) und Eigennamen
     regular_tokens, name_tokens = split_proper_nouns(text)
     
@@ -173,21 +174,35 @@ def evaluate_pdf(pdf_path: Path) -> dict:
 
     initial_score = round(overall, 4)
     logger.info(f"Ausgangsscore wurde ermittelt mit {initial_score}")
-    
+
     logger.info(f"Starte LLM-Korrektur")
-    corrected_text, all_corrections = correct_with_llm(text, vocab_result["fuzzy_hits_all"], vocab_result["misses_all"])
+    text_final = correct_with_llm(text)
+
+    # 2. Eva-Runde -> Evaluierung der LLM Ergebnisse
+    regular_tokens, name_tokens = split_proper_nouns(text_final)
+    vocab_result_final = evaluate_against_vocab(regular_tokens, vocab)
+    name_result_final = evaluate_proper_nouns(name_tokens, known_names or set())
+    overall = (
+        vocab_result["recognition_rate"] * 0.8 +
+        name_result["plausibility_rate"] * 0.2
+    )
+    final_score = round(overall, 4)
+    logger.info(f"2. Eva-Score wurde ermittelt mit {initial_score}")
   
     eval_result = {
         "file": pdf_path.name,
         "initial_score": initial_score,
-        "overall_recognition_rate": round(overall, 4),
+        "final_score": final_score,
         "vocabulary": vocab_result,
+        "vocabulary_final": vocab_result_final,
         "proper_nouns": name_result,
+        "proper_nouns_final": name_result_final,
         "char_count": len(text),
+        "char_count_final": len(text_final),
         "token_count": len(regular_tokens) + len(name_tokens),
-        "llm_corrections": all_corrections,
-        "llm_correction_count": len(all_corrections)
+        "llm_corrections": text_final
     }
+    return eval_result, text_final
 
 
 # Cache für zusammengesetzte Wörter, um wiederholte Checks zu beschleunigen
@@ -207,71 +222,32 @@ def is_valid_compound(token: str) -> bool:
     return False
     
     # Korrektur der OCR-Fehler mit LLM, basierend auf den erkannten Fehlern
-def correct_with_llm(text: str, fuzzy_hits: list[tuple], misses: list[tuple]) -> str:
-    fuzzy_words = list(set(m[0] for m in fuzzy_hits[:20]))  # Duplikate raus
-    miss_words = list(set(m[0] for m in misses[:20]))  # Duplikate raus
-    suspect_words = list(set(fuzzy_words + miss_words))
-
+def correct_with_llm(text: str) -> str:
     # Text in Chunks aufteilen
     chunk_size = 2000  # Zeichen pro Chunk
     chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
-    logger.info(f"LLM Korrektur: {len(chunks)} Chunks, {len(suspect_words)} verdächtige Wörter")
+    logger.info(f"LLM Korrektur: {len(chunks)} Chunks")
+    all_corrections = []
 
-    corrected_chunks = []
-    for i, chunk in enumerate(chunks):
-        # Nur Chunks verarbeiten die verdächtige Wörter enthalten
-        if not any(word in chunk.lower() for word in suspect_words):
-            corrected_chunks.append(chunk)
-            continue
-
+    for chunk in enumerate(chunks):
         prompt = f"""Du bist ein OCR-Korrektur-Assistent.
-        Analysiere den Text und korrigiere NUR offensichtliche OCR-Fehler aus der Verdächtigenliste.
+        Analysiere den Text und korrigiere NUR offensichtliche OCR-Fehler.
         Erfinde KEINE Wörter. Behalte Eigennamen und Fremdwörter unverändert.
-
-        Antworte NUR mit einem JSON-Objekt in diesem Format:
-        {{
-            "corrections": [
-                {{"original": "witräumigkeit", "corrected": "weiträumigkeit", "reason": "fehlender Buchstabe"}},
-                {{"original": "ribao", "corrected": "ribao", "reason": "Eigenname, keine Korrektur"}}
-            ],
-            "corrected_text": "der vollständige korrigierte Text"
-        }}
-
-        Verdächtige Wörter: {', '.join(suspect_words)}
-
-        Text:
-        {chunk}"""
+        Deine Antwort besteht NUR aus dem korrigierten Text.
+        
+        Text: {chunk}"""
 
         llm_response = client.chat(
-            model="mistral",
+            model="qwen2.5:3b-instruct-q4_K_M",
             messages=[{"role": "user", "content": prompt}],
             options={
                 "temperature": 0,
                 "num_predict": chunk_size + 200
             }
         )
-    
-        all_corrections = []
-        # Parse JSON
-        try:
-            raw = llm_response.message.content.strip()
-            raw = re.sub(r"```json|```", "", raw).strip()  # Markdown-Backticks raus
-            parsed = json.loads(raw)
-            
-            corrected_text = parsed.get("corrected_text", chunk)
-            corrections = parsed.get("corrections", [])
-            
-            # Nur tatsächliche Korrekturen loggen
-            actual = [c for c in corrections if c["original"] != c["corrected"]]
-            logger.info(f"Chunk {i+1}: {len(actual)} Korrekturen: {actual}")
-            
-            corrected_chunks.append(corrected_text)
-            all_corrections.extend(actual)  # ← Sammelliste über alle Chunks
-
-        except json.JSONDecodeError as e:
-            logger.error(f"LLM JSON Parse Fehler Chunk {i+1}: {e} – Original behalten")
-            corrected_chunks.append(chunk)
-    return "\n".join(corrected_chunks), all_corrections
+        raw = llm_response.message.content.strip()
+        all_corrections.append(raw)
+    return "".join(all_corrections)
 
 ### Evaluation setup ###
 logger.info("Building vocabulary and loading known names...")
