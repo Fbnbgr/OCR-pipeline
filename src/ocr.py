@@ -98,7 +98,8 @@ def run_ocr(job_id: str, input_path: Path, output_path: Path, options: dict):
             jobs[job_id]["status"] = "correcting"
             logger.info(
                 f"Job {job_id} eval: "
-                f"recognition={eval_result['overall_recognition_rate']:.1%} "
+                f"initial_score={eval_result['initial_score']:.1%} "
+                f"final_score={eval_result['final_score']:.1%} "
                 f"exact={eval_result['vocabulary']['exact_hits']} "
                 f"fuzzy={eval_result['vocabulary']['fuzzy_hits']} "
                 f"tokens={eval_result['token_count']} "
